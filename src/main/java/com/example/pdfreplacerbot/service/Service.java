@@ -12,9 +12,13 @@ import org.apache.pdfbox.pdmodel.font.PDType0Font;
 import org.apache.pdfbox.pdmodel.graphics.PDXObject;
 import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
+import org.apache.pdfbox.rendering.PDFRenderer;
 import org.apache.pdfbox.util.Matrix;
 import org.springframework.stereotype.Component;
 
+import javax.imageio.ImageIO;
+import java.awt.*;
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -92,6 +96,7 @@ public class Service {
             stream.restoreGraphicsState();
         } else {
             PDImageXObject imageXObject = (PDImageXObject) xObject;
+            imageXObject.setInterpolate(false);
             stream.drawImage(imageXObject, DATAMATRIX_X, DATAMATRIX_Y, DATAMATRIX_SIZE, DATAMATRIX_SIZE);
         }
 
