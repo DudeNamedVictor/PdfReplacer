@@ -1,6 +1,7 @@
 package com.example.pdfreplacerbot.service;
 
 import lombok.AllArgsConstructor;
+import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
@@ -9,18 +10,22 @@ import org.apache.pdfbox.pdmodel.PDResources;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.apache.pdfbox.pdmodel.font.PDType0Font;
+import org.apache.pdfbox.pdmodel.font.PDType1Font;
+import org.apache.pdfbox.pdmodel.font.PDType3Font;
 import org.apache.pdfbox.pdmodel.graphics.PDXObject;
 import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject;
+import org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.apache.pdfbox.rendering.PDFRenderer;
 import org.apache.pdfbox.util.Matrix;
 import org.springframework.stereotype.Component;
 
-import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -42,8 +47,33 @@ public class Service {
     public File processPdf(File source, String replacementText) throws IOException {
         File fileResult = new File("files/result.pdf");
 
-        PDDocument input = PDDocument.load(source);
+        File intermediateFile;
+        try (PDDocument input = Loader.loadPDF(source)) {
+            intermediateFile = createIntermediate(input, replacementText);
+        }
+        PDDocument intermediate = Loader.loadPDF(intermediateFile);
+        PDFRenderer renderer = new PDFRenderer(intermediate);
+        intermediateFile.delete();
         PDDocument result = new PDDocument();
+        for (int i = 0; i < intermediate.getNumberOfPages(); i++) {
+            BufferedImage pageImage = renderer.renderImage(i, 6);
+            PDPage newPage = new PDPage(new PDRectangle(0, 0, PAGE_WIDTH, PAGE_HEIGHT));
+            try (PDPageContentStream stream = new PDPageContentStream(result, newPage)) {
+                PDImageXObject imageObject = LosslessFactory.createFromImage(result, pageImage);
+                imageObject.setInterpolate(false);
+                stream.drawImage(imageObject, 0, 0, PAGE_WIDTH, PAGE_HEIGHT);
+            }
+            result.addPage(newPage);
+        }
+        result.save(fileResult);
+        result.close();
+
+        return fileResult;
+    }
+
+    private File createIntermediate(PDDocument input, String replacementText) throws IOException {
+        File tmp = Files.createTempFile("intermediate", "pdf").toFile();
+        PDDocument intermediate = new PDDocument();
         for (int i = 0; i < input.getNumberOfPages(); i++) {
             PDPage page = input.getPage(i);
             PDXObject xObject;
@@ -57,13 +87,11 @@ public class Service {
                 System.out.println("Image or form not found");
                 continue;
             }
-            addPage(result, xObject, replacementText);
+            addPage(intermediate, xObject, replacementText);
         }
-        result.save(fileResult);
-        input.close();
-        result.close();
-
-        return fileResult;
+        intermediate.save(tmp);
+        intermediate.close();
+        return tmp;
     }
 
     private PDXObject extractImageOrForm(PDPage page) throws IOException {
