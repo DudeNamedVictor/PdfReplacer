@@ -3,29 +3,23 @@ package com.example.pdfreplacerbot.service;
 import lombok.AllArgsConstructor;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.cos.COSName;
-import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.pdmodel.PDPage;
-import org.apache.pdfbox.pdmodel.PDPageContentStream;
-import org.apache.pdfbox.pdmodel.PDResources;
+import org.apache.pdfbox.pdmodel.*;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.apache.pdfbox.pdmodel.font.PDType0Font;
-import org.apache.pdfbox.pdmodel.font.PDType1Font;
-import org.apache.pdfbox.pdmodel.font.PDType3Font;
 import org.apache.pdfbox.pdmodel.graphics.PDXObject;
 import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject;
 import org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
+import org.apache.pdfbox.rendering.ImageType;
 import org.apache.pdfbox.rendering.PDFRenderer;
 import org.apache.pdfbox.util.Matrix;
 import org.springframework.stereotype.Component;
 
-import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -51,22 +45,25 @@ public class Service {
         try (PDDocument input = Loader.loadPDF(source)) {
             intermediateFile = createIntermediate(input, replacementText);
         }
+
+        long processingTime = System.currentTimeMillis();
         PDDocument intermediate = Loader.loadPDF(intermediateFile);
         PDFRenderer renderer = new PDFRenderer(intermediate);
         intermediateFile.delete();
         PDDocument result = new PDDocument();
         for (int i = 0; i < intermediate.getNumberOfPages(); i++) {
-            BufferedImage pageImage = renderer.renderImage(i, 6);
+            BufferedImage pageImage = renderer.renderImage(i, 4, ImageType.GRAY);
             PDPage newPage = new PDPage(new PDRectangle(0, 0, PAGE_WIDTH, PAGE_HEIGHT));
             try (PDPageContentStream stream = new PDPageContentStream(result, newPage)) {
                 PDImageXObject imageObject = LosslessFactory.createFromImage(result, pageImage);
-                imageObject.setInterpolate(false);
                 stream.drawImage(imageObject, 0, 0, PAGE_WIDTH, PAGE_HEIGHT);
             }
+            pageImage.flush();
             result.addPage(newPage);
         }
         result.save(fileResult);
         result.close();
+        System.out.println("Processing time " + (System.currentTimeMillis() - processingTime));
 
         return fileResult;
     }
@@ -74,6 +71,8 @@ public class Service {
     private File createIntermediate(PDDocument input, String replacementText) throws IOException {
         File tmp = Files.createTempFile("intermediate", "pdf").toFile();
         PDDocument intermediate = new PDDocument();
+        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+        PDFont font = PDType0Font.load(intermediate, classLoader.getResourceAsStream("arial.ttf"));
         for (int i = 0; i < input.getNumberOfPages(); i++) {
             PDPage page = input.getPage(i);
             PDXObject xObject;
@@ -87,7 +86,7 @@ public class Service {
                 System.out.println("Image or form not found");
                 continue;
             }
-            addPage(intermediate, xObject, replacementText);
+            addPage(intermediate, xObject, replacementText, font);
         }
         intermediate.save(tmp);
         intermediate.close();
@@ -107,7 +106,7 @@ public class Service {
         return null;
     }
 
-    private void addPage(PDDocument document, PDXObject xObject, String text) throws IOException {
+    private void addPage(PDDocument document, PDXObject xObject, String text, PDFont font) throws IOException {
         PDPage page = new PDPage(new PDRectangle(PAGE_WIDTH, PAGE_HEIGHT));
         PDPageContentStream stream = new PDPageContentStream(document, page, PDPageContentStream.AppendMode.APPEND, true);
         if (xObject instanceof PDFormXObject formXObject) {
@@ -131,8 +130,6 @@ public class Service {
         stream.beginText();
         stream.setLeading(20);
         stream.newLineAtOffset(TEXT_X, TEXT_Y);
-        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
-        PDFont font = PDType0Font.load(document, classLoader.getResourceAsStream("arial.ttf"));
 
         List<String> lines = splitForLines(text);
         for (String line : lines) {
