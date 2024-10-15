@@ -2,12 +2,10 @@ package com.example.pdfreplacerbot;
 
 import com.example.pdfreplacerbot.config.BotConfig;
 import com.example.pdfreplacerbot.service.Service;
-import org.apache.commons.io.FileUtils;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.client.okhttp.OkHttpTelegramClient;
 import org.telegram.telegrambots.longpolling.interfaces.LongPollingUpdateConsumer;
 import org.telegram.telegrambots.longpolling.starter.SpringLongPollingBot;
-import org.telegram.telegrambots.longpolling.util.LongPollingSingleThreadUpdateConsumer;
 import org.telegram.telegrambots.meta.api.methods.GetFile;
 import org.telegram.telegrambots.meta.api.methods.send.SendDocument;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
@@ -24,16 +22,18 @@ import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 
 @Component
-public class TelegramBot implements SpringLongPollingBot, LongPollingSingleThreadUpdateConsumer {
+public class TelegramBot implements SpringLongPollingBot, LongPollingUpdateConsumer {
 
     private final BotConfig botConfig;
     private final Service service;
     private final TelegramClient client;
     private final Map<Long, String> users = new HashMap<>();
 
-    private final String FILES_DIR = "files/";
+    private final Executor executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
 
     public TelegramBot(BotConfig botConfig, Service service) {
         this.botConfig = botConfig;
@@ -41,7 +41,6 @@ public class TelegramBot implements SpringLongPollingBot, LongPollingSingleThrea
         this.client = new OkHttpTelegramClient(botConfig.getToken());
     }
 
-    @Override
     public void consume(Update update) {
         if (update.hasMessage()) {
             Message message = update.getMessage();
@@ -79,9 +78,7 @@ public class TelegramBot implements SpringLongPollingBot, LongPollingSingleThrea
                         }
 
                         java.io.File result = service.processPdf(dFile, users.get(message.getChatId()));
-
                         sendFileResponse(result, message.getChatId(), document.getFileName());
-                        FileUtils.deleteDirectory(new java.io.File(FILES_DIR + "/" + message.getChatId()));
                         users.remove(message.getChatId());
                         String response = """
                             Обработка прошла успешно.
@@ -89,6 +86,8 @@ public class TelegramBot implements SpringLongPollingBot, LongPollingSingleThrea
                             """;
                         sendTextResponse(response, message.getChatId());
 
+                        dFile.delete();
+                        result.delete();
                     } catch (Exception e) {
                         String response = """
                             Что-то пошло не так.
@@ -149,6 +148,6 @@ public class TelegramBot implements SpringLongPollingBot, LongPollingSingleThrea
 
     @Override
     public void consume(List<Update> updates) {
-        LongPollingSingleThreadUpdateConsumer.super.consume(updates);
+        updates.forEach((update) -> executor.execute(() -> consume(update)));
     }
 }

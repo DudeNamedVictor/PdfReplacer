@@ -39,7 +39,7 @@ public class Service {
 
 
     public File processPdf(File source, String replacementText) throws IOException {
-        File fileResult = new File("files/result.pdf");
+        File fileResult = File.createTempFile("process", ".pdf");
 
         File intermediateFile;
         try (PDDocument input = Loader.loadPDF(source)) {
@@ -49,7 +49,6 @@ public class Service {
         long processingTime = System.currentTimeMillis();
         PDDocument intermediate = Loader.loadPDF(intermediateFile);
         PDFRenderer renderer = new PDFRenderer(intermediate);
-        intermediateFile.delete();
         PDDocument result = new PDDocument();
         for (int i = 0; i < intermediate.getNumberOfPages(); i++) {
             BufferedImage pageImage = renderer.renderImage(i, 4, ImageType.GRAY);
@@ -63,13 +62,14 @@ public class Service {
         }
         result.save(fileResult);
         result.close();
-        System.out.println("Processing time " + (System.currentTimeMillis() - processingTime));
+        intermediateFile.delete();
+        System.out.println("Processing time: " + (System.currentTimeMillis() - processingTime) + "ms");
 
         return fileResult;
     }
 
     private File createIntermediate(PDDocument input, String replacementText) throws IOException {
-        File tmp = Files.createTempFile("intermediate", "pdf").toFile();
+        File tmp = Files.createTempFile("intermediate", ".pdf").toFile();
         PDDocument intermediate = new PDDocument();
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
         PDFont font = PDType0Font.load(intermediate, classLoader.getResourceAsStream("arial.ttf"));
