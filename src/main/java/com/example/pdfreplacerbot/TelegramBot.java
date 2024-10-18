@@ -54,12 +54,7 @@ public class TelegramBot implements SpringLongPollingBot, LongPollingUpdateConsu
                     sendTextResponse(response, chatId);
                     return;
                 }
-                users.put(message.getChatId(), document);
-
-                String response = """
-                        Напишите текст, который необходимо вставить в документ.
-                        """;
-                sendTextResponse(response, chatId);
+                users.put(chatId, document);
             }
             if (message.hasText()) {
                 if (message.getText().equals("/start")) {
@@ -67,7 +62,7 @@ public class TelegramBot implements SpringLongPollingBot, LongPollingUpdateConsu
                             Загрузите исходный файл Честного Знака, в формате PDF.
                             """;
 
-                    sendTextResponse(response, message.getChatId());
+                    sendTextResponse(response, chatId);
                 } else {
                     String replacementText = message.getText();
                     Document document = users.get(chatId);
@@ -75,7 +70,7 @@ public class TelegramBot implements SpringLongPollingBot, LongPollingUpdateConsu
                         String response = """
                                 Сначала загрузите файл, затем пришлите текст.
                                 """;
-                        sendTextResponse(response, message.getChatId());
+                        sendTextResponse(response, chatId);
                         return;
                     }
                     try {
@@ -102,10 +97,15 @@ public class TelegramBot implements SpringLongPollingBot, LongPollingUpdateConsu
                             Что-то пошло не так.
                             """;
 
-                        sendTextResponse(response + e.getMessage(), message.getChatId());
+                        sendTextResponse(response + e.getMessage(), chatId);
                         throw new RuntimeException(e);
                     }
                 }
+            } else {
+                String response = """
+                        Напишите текст, который необходимо вставить в документ.
+                        """;
+                sendTextResponse(response, chatId);
             }
         }
     }
